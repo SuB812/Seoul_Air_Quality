@@ -24,13 +24,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 차트 한글 폰트 깨짐 방지 (Plotly는 웹폰트를 사용하므로 이 설정으로 충분)
 PLOTLY_FONT = dict(
     family="Noto Sans KR, Malgun Gothic, AppleGothic, sans-serif",
     size=12,
 )
 
-# 색상 팔레트
 COLOR_PALETTE = ["#2563eb", "#7c3aed", "#f59e0b", "#10b981", "#ef4444",
                  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1"]
 
@@ -42,13 +40,11 @@ DB_PATH = "chinook.db"
 # ============================================================
 @st.cache_data(show_spinner=False)
 def load_data():
-    """DB에서 모든 필요한 데이터를 로드해서 dict로 반환"""
     if not os.path.exists(DB_PATH):
         return None
 
     conn = sqlite3.connect(DB_PATH)
     try:
-        # 1) 매출 마스터 (invoices + customers + employees join)
         invoices_query = """
             SELECT
                 i.InvoiceId,
@@ -70,7 +66,6 @@ def load_data():
         df_invoices["Month"] = df_invoices["InvoiceDate"].dt.month
         df_invoices["YearMonth"] = df_invoices["InvoiceDate"].dt.to_period("M").astype(str)
 
-        # 2) 라인 아이템 (invoice_items + tracks + genres + albums + artists join)
         items_query = """
             SELECT
                 ii.InvoiceLineId,
@@ -108,7 +103,6 @@ def load_data():
 # 유틸리티 함수
 # ============================================================
 def apply_filters(df, year_range, countries):
-    """공통 필터 적용 (연도 범위, 국가)"""
     mask = (df["Year"] >= year_range[0]) & (df["Year"] <= year_range[1])
     if countries:
         mask &= df["Country"].isin(countries)
@@ -116,7 +110,6 @@ def apply_filters(df, year_range, countries):
 
 
 def style_plotly(fig, height=400):
-    """Plotly 차트 공통 스타일링"""
     fig.update_layout(
         font=PLOTLY_FONT,
         height=height,
@@ -129,7 +122,6 @@ def style_plotly(fig, height=400):
 
 
 def format_currency(value):
-    """통화 형식으로 포맷팅"""
     return f"${value:,.2f}"
 
 
@@ -144,13 +136,11 @@ def page_overview(df_inv, df_inv_full):
         st.warning("선택한 조건에 해당하는 데이터가 없습니다. 사이드바 필터를 조정해주세요.")
         return
 
-    # KPI 계산
     total_revenue = df_inv["Total"].sum()
     total_orders = len(df_inv)
     total_customers = df_inv["CustomerId"].nunique()
     avg_order = total_revenue / total_orders if total_orders > 0 else 0
 
-    # 전체 데이터 대비 비교 (delta)
     full_revenue = df_inv_full["Total"].sum()
     full_orders = len(df_inv_full)
     full_customers = df_inv_full["CustomerId"].nunique()
@@ -161,37 +151,22 @@ def page_overview(df_inv, df_inv_full):
     delta_customers = total_customers - full_customers
     delta_avg = avg_order - full_avg
 
-    # KPI 카드 4개
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(
-            "총 매출",
-            format_currency(total_revenue),
-            delta=f"{delta_revenue:+,.2f}" if delta_revenue != 0 else None,
-            delta_color="normal",
-        )
+        st.metric("총 매출", format_currency(total_revenue),
+                  delta=f"{delta_revenue:+,.2f}" if delta_revenue != 0 else None)
     with col2:
-        st.metric(
-            "총 주문수",
-            f"{total_orders:,}",
-            delta=f"{delta_orders:+,}" if delta_orders != 0 else None,
-        )
+        st.metric("총 주문수", f"{total_orders:,}",
+                  delta=f"{delta_orders:+,}" if delta_orders != 0 else None)
     with col3:
-        st.metric(
-            "고객수",
-            f"{total_customers:,}",
-            delta=f"{delta_customers:+,}" if delta_customers != 0 else None,
-        )
+        st.metric("고객수", f"{total_customers:,}",
+                  delta=f"{delta_customers:+,}" if delta_customers != 0 else None)
     with col4:
-        st.metric(
-            "평균 주문액",
-            format_currency(avg_order),
-            delta=f"{delta_avg:+,.2f}" if delta_avg != 0 else None,
-        )
+        st.metric("평균 주문액", format_currency(avg_order),
+                  delta=f"{delta_avg:+,.2f}" if delta_avg != 0 else None)
 
     st.markdown("---")
 
-    # 연도별 매출 추이 라인 차트
     st.subheader("📈 연도별 매출 추이")
     yearly = df_inv.groupby("Year").agg(
         Revenue=("Total", "sum"),
@@ -209,26 +184,18 @@ def page_overview(df_inv, df_inv_full):
         textposition="top center",
         hovertemplate="<b>%{x}</b><br>매출: $%{y:,.2f}<extra></extra>",
     ))
-    fig_line.update_layout(
-        title="연도별 매출",
-        xaxis_title="연도",
-        yaxis_title="매출 ($)",
-        xaxis=dict(dtick=1),
-    )
+    fig_line.update_layout(title="연도별 매출", xaxis_title="연도", yaxis_title="매출 ($)", xaxis=dict(dtick=1))
     st.plotly_chart(style_plotly(fig_line, height=380), use_container_width=True)
 
-    # 월별 매출 히트맵
     st.subheader("🔥 월별 매출 히트맵")
     heatmap = df_inv.groupby(["Year", "Month"])["Total"].sum().reset_index()
     pivot = heatmap.pivot(index="Year", columns="Month", values="Total").fillna(0)
-
-    # 모든 월(1~12)이 컬럼에 있도록 보장
     for m in range(1, 13):
         if m not in pivot.columns:
             pivot[m] = 0
     pivot = pivot[sorted(pivot.columns)]
-
     month_labels = [f"{m}월" for m in pivot.columns]
+
     fig_heat = go.Figure(data=go.Heatmap(
         z=pivot.values,
         x=month_labels,
@@ -240,12 +207,7 @@ def page_overview(df_inv, df_inv_full):
         hovertemplate="<b>%{y}년 %{x}</b><br>매출: $%{z:,.2f}<extra></extra>",
         colorbar=dict(title="매출 ($)"),
     ))
-    fig_heat.update_layout(
-        title="연도 × 월 매출 히트맵",
-        xaxis_title="월",
-        yaxis_title="연도",
-        yaxis=dict(dtick=1),
-    )
+    fig_heat.update_layout(title="연도 × 월 매출 히트맵", xaxis_title="월", yaxis_title="연도", yaxis=dict(dtick=1))
     st.plotly_chart(style_plotly(fig_heat, height=350), use_container_width=True)
 
 
@@ -260,7 +222,6 @@ def page_customers(df_inv):
         st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
         return
 
-    # 국가별 매출 Top 10
     st.subheader("🏆 국가별 매출 Top 10")
     country_rev = df_inv.groupby("Country").agg(
         Revenue=("Total", "sum"),
@@ -277,14 +238,9 @@ def page_customers(df_inv):
         color_continuous_scale="Blues",
     )
     fig_country.update_traces(textposition="outside")
-    fig_country.update_layout(
-        xaxis_title="매출 ($)",
-        yaxis_title="",
-        coloraxis_showscale=False,
-    )
+    fig_country.update_layout(xaxis_title="매출 ($)", yaxis_title="", coloraxis_showscale=False)
     st.plotly_chart(style_plotly(fig_country, height=420), use_container_width=True)
 
-    # 국가별 고객 수 vs 평균 주문액 산점도
     st.subheader("💎 국가별 고객 수 vs 평균 주문액")
     scatter = df_inv.groupby("Country").agg(
         Customers=("CustomerId", "nunique"),
@@ -295,20 +251,13 @@ def page_customers(df_inv):
     fig_scatter = px.scatter(
         scatter, x="Customers", y="AvgOrder",
         size="TotalRevenue", color="TotalRevenue",
-        hover_name="Country",
-        text="Country",
-        color_continuous_scale="Viridis",
-        size_max=50,
-        labels={
-            "Customers": "고객 수",
-            "AvgOrder": "평균 주문액 ($)",
-            "TotalRevenue": "총 매출 ($)",
-        },
+        hover_name="Country", text="Country",
+        color_continuous_scale="Viridis", size_max=50,
+        labels={"Customers": "고객 수", "AvgOrder": "평균 주문액 ($)", "TotalRevenue": "총 매출 ($)"},
     )
     fig_scatter.update_traces(textposition="top center", textfont_size=10)
     st.plotly_chart(style_plotly(fig_scatter, height=450), use_container_width=True)
 
-    # 고객별 총 구매액 순위 테이블
     st.subheader("👤 고객별 구매 순위")
     customer_rank = df_inv.groupby(["CustomerId", "CustomerName", "Country"]).agg(
         총주문수=("InvoiceId", "count"),
@@ -318,12 +267,10 @@ def page_customers(df_inv):
 
     customer_rank["총구매액"] = customer_rank["총구매액"].round(2)
     customer_rank["평균주문액"] = customer_rank["평균주문액"].round(2)
-    customer_rank = customer_rank.rename(columns={
-        "CustomerName": "고객명",
-        "Country": "국가",
-    })[["고객명", "국가", "총주문수", "총구매액", "평균주문액"]]
+    customer_rank = customer_rank.rename(columns={"CustomerName": "고객명", "Country": "국가"})[
+        ["고객명", "국가", "총주문수", "총구매액", "평균주문액"]
+    ]
 
-    # 검색 기능
     search = st.text_input("🔍 고객명 또는 국가로 검색", placeholder="예: Smith, Germany...")
     if search:
         mask = (
@@ -333,9 +280,7 @@ def page_customers(df_inv):
         customer_rank = customer_rank[mask]
 
     st.dataframe(
-        customer_rank,
-        use_container_width=True,
-        height=400,
+        customer_rank, use_container_width=True, height=400,
         column_config={
             "총구매액": st.column_config.NumberColumn(format="$%.2f"),
             "평균주문액": st.column_config.NumberColumn(format="$%.2f"),
@@ -356,7 +301,6 @@ def page_genres(df_items):
         st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
         return
 
-    # 장르별 판매량 도넛 차트
     col_a, col_b = st.columns([1, 1])
 
     with col_a:
@@ -366,29 +310,21 @@ def page_genres(df_items):
             Revenue=("LineTotal", "sum"),
         ).reset_index().sort_values("Quantity", ascending=False)
 
-        # Top 8 + 기타
         if len(genre_qty) > 8:
             top = genre_qty.head(8)
             others_qty = genre_qty.iloc[8:]["Quantity"].sum()
             others_rev = genre_qty.iloc[8:]["Revenue"].sum()
-            top = pd.concat([top, pd.DataFrame([{
-                "Genre": "기타", "Quantity": others_qty, "Revenue": others_rev
-            }])], ignore_index=True)
+            top = pd.concat([top, pd.DataFrame([{"Genre": "기타", "Quantity": others_qty, "Revenue": others_rev}])], ignore_index=True)
         else:
             top = genre_qty
 
         fig_donut = go.Figure(data=[go.Pie(
-            labels=top["Genre"],
-            values=top["Quantity"],
-            hole=0.5,
+            labels=top["Genre"], values=top["Quantity"], hole=0.5,
             marker=dict(colors=COLOR_PALETTE),
             textinfo="label+percent",
             hovertemplate="<b>%{label}</b><br>판매량: %{value}곡<br>비중: %{percent}<extra></extra>",
         )])
-        fig_donut.update_layout(
-            showlegend=True,
-            legend=dict(orientation="v", x=1.0, y=0.5),
-        )
+        fig_donut.update_layout(showlegend=True, legend=dict(orientation="v", x=1.0, y=0.5))
         st.plotly_chart(style_plotly(fig_donut, height=400), use_container_width=True)
 
     with col_b:
@@ -398,17 +334,10 @@ def page_genres(df_items):
             매출=("LineTotal", "sum"),
         ).reset_index().sort_values("매출", ascending=False).head(10)
         genre_summary["매출"] = genre_summary["매출"].round(2)
-        st.dataframe(
-            genre_summary,
-            use_container_width=True,
-            height=400,
-            column_config={
-                "매출": st.column_config.NumberColumn(format="$%.2f"),
-            },
-            hide_index=True,
-        )
+        st.dataframe(genre_summary, use_container_width=True, height=400,
+                     column_config={"매출": st.column_config.NumberColumn(format="$%.2f")},
+                     hide_index=True)
 
-    # 장르별 매출 트렌드 (스택 영역 차트)
     st.subheader("📈 장르별 매출 트렌드 (Top 6)")
     top_genres = df_items.groupby("Genre")["LineTotal"].sum().nlargest(6).index.tolist()
     trend = df_items[df_items["Genre"].isin(top_genres)].groupby(["Year", "Genre"])["LineTotal"].sum().reset_index()
@@ -418,13 +347,9 @@ def page_genres(df_items):
         color_discrete_sequence=COLOR_PALETTE,
         labels={"LineTotal": "매출 ($)", "Year": "연도"},
     )
-    fig_area.update_layout(
-        xaxis=dict(dtick=1),
-        hovermode="x unified",
-    )
+    fig_area.update_layout(xaxis=dict(dtick=1), hovermode="x unified")
     st.plotly_chart(style_plotly(fig_area, height=400), use_container_width=True)
 
-    # 인기 아티스트 Top 15
     st.subheader("🎤 인기 아티스트 Top 15 (매출 기준)")
     artist_rev = df_items.groupby("Artist").agg(
         매출=("LineTotal", "sum"),
@@ -433,18 +358,12 @@ def page_genres(df_items):
 
     fig_artist = px.bar(
         artist_rev.sort_values("매출"),
-        x="매출", y="Artist",
-        orientation="h",
+        x="매출", y="Artist", orientation="h",
         text=artist_rev.sort_values("매출")["매출"].apply(lambda v: f"${v:.2f}"),
-        color="매출",
-        color_continuous_scale="Purples",
+        color="매출", color_continuous_scale="Purples",
     )
     fig_artist.update_traces(textposition="outside")
-    fig_artist.update_layout(
-        xaxis_title="매출 ($)",
-        yaxis_title="",
-        coloraxis_showscale=False,
-    )
+    fig_artist.update_layout(xaxis_title="매출 ($)", yaxis_title="", coloraxis_showscale=False)
     st.plotly_chart(style_plotly(fig_artist, height=500), use_container_width=True)
 
 
@@ -459,56 +378,42 @@ def page_sales_rep(df_inv):
         st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
         return
 
-    # SalesRep이 None인 행 제외
     df_rep = df_inv[df_inv["SalesRep"].notna()].copy()
-
     if df_rep.empty:
         st.warning("영업사원 정보가 있는 데이터가 없습니다.")
         return
 
-    # 담당자별 KPI
     rep_summary = df_rep.groupby("SalesRep").agg(
         매출=("Total", "sum"),
         주문수=("InvoiceId", "count"),
         고객수=("CustomerId", "nunique"),
     ).reset_index().sort_values("매출", ascending=False)
 
-    # 상단 KPI: 담당자별 카드
     cols = st.columns(len(rep_summary))
     for idx, (col, row) in enumerate(zip(cols, rep_summary.itertuples())):
         with col:
-            st.metric(
-                row.SalesRep,
-                format_currency(row.매출),
-                delta=f"{row.주문수}건 / {row.고객수}명",
-                delta_color="off",
-            )
+            st.metric(row.SalesRep, format_currency(row.매출),
+                      delta=f"{row.주문수}건 / {row.고객수}명", delta_color="off")
 
     st.markdown("---")
 
-    # 담당자별 매출/주문수/고객수 비교 막대 차트
     st.subheader("📊 담당자별 성과 비교")
     fig_compare = go.Figure()
     fig_compare.add_trace(go.Bar(
         name="매출 ($)", x=rep_summary["SalesRep"], y=rep_summary["매출"],
         marker_color=COLOR_PALETTE[0],
         text=[f"${v:.0f}" for v in rep_summary["매출"]],
-        textposition="outside",
-        yaxis="y",
+        textposition="outside", yaxis="y",
     ))
     fig_compare.add_trace(go.Bar(
         name="주문수", x=rep_summary["SalesRep"], y=rep_summary["주문수"],
-        marker_color=COLOR_PALETTE[1],
-        text=rep_summary["주문수"],
-        textposition="outside",
-        yaxis="y2",
+        marker_color=COLOR_PALETTE[1], text=rep_summary["주문수"],
+        textposition="outside", yaxis="y2",
     ))
     fig_compare.add_trace(go.Bar(
         name="고객수", x=rep_summary["SalesRep"], y=rep_summary["고객수"],
-        marker_color=COLOR_PALETTE[2],
-        text=rep_summary["고객수"],
-        textposition="outside",
-        yaxis="y2",
+        marker_color=COLOR_PALETTE[2], text=rep_summary["고객수"],
+        textposition="outside", yaxis="y2",
     ))
     fig_compare.update_layout(
         barmode="group",
@@ -518,24 +423,18 @@ def page_sales_rep(df_inv):
     )
     st.plotly_chart(style_plotly(fig_compare, height=420), use_container_width=True)
 
-    # 담당자별 월별 매출 추이
     st.subheader("📈 담당자별 월별 매출 추이")
     monthly = df_rep.groupby(["YearMonth", "SalesRep"])["Total"].sum().reset_index()
     monthly = monthly.sort_values("YearMonth")
 
     fig_monthly = px.line(
         monthly, x="YearMonth", y="Total", color="SalesRep",
-        markers=True,
-        color_discrete_sequence=COLOR_PALETTE,
+        markers=True, color_discrete_sequence=COLOR_PALETTE,
         labels={"Total": "매출 ($)", "YearMonth": "연-월", "SalesRep": "담당자"},
     )
-    fig_monthly.update_layout(
-        hovermode="x unified",
-        xaxis=dict(tickangle=-45),
-    )
+    fig_monthly.update_layout(hovermode="x unified", xaxis=dict(tickangle=-45))
     st.plotly_chart(style_plotly(fig_monthly, height=400), use_container_width=True)
 
-    # 담당자별 고객 국가 분포
     st.subheader("🌐 담당자별 고객 국가 분포")
     country_dist = df_rep.groupby(["SalesRep", "Country"]).agg(
         매출=("Total", "sum"),
@@ -543,20 +442,221 @@ def page_sales_rep(df_inv):
     ).reset_index()
 
     fig_dist = px.sunburst(
-        country_dist,
-        path=["SalesRep", "Country"],
-        values="매출",
-        color="매출",
-        color_continuous_scale="Blues",
+        country_dist, path=["SalesRep", "Country"],
+        values="매출", color="매출", color_continuous_scale="Blues",
     )
     st.plotly_chart(style_plotly(fig_dist, height=500), use_container_width=True)
+
+
+# ============================================================
+# 페이지 5: 고객 관리 (신규 추가)
+# ============================================================
+def page_customer_management():
+    st.title("👥 고객 관리")
+    st.caption("고객 정보 조회, 수정, 신규 고객 추가를 할 수 있습니다.")
+
+    # 탭 구성
+    tab1, tab2, tab3 = st.tabs(["📋 고객 목록 조회", "✏️ 고객 정보 수정", "➕ 신규 고객 추가"])
+
+    # ----------------------------------------------------------
+    # 탭 1: 고객 목록 조회
+    # ----------------------------------------------------------
+    with tab1:
+        st.subheader("📋 전체 고객 목록")
+
+        conn = sqlite3.connect(DB_PATH)
+        df_customers = pd.read_sql("""
+            SELECT
+                c.CustomerId       AS 고객ID,
+                c.FirstName        AS 이름,
+                c.LastName         AS 성,
+                c.Company          AS 회사,
+                c.Country          AS 국가,
+                c.City             AS 도시,
+                c.Email            AS 이메일,
+                c.Phone            AS 전화번호,
+                e.FirstName || ' ' || e.LastName AS 담당직원
+            FROM customers c
+            LEFT JOIN employees e ON c.SupportRepId = e.EmployeeId
+            ORDER BY c.CustomerId
+        """, conn)
+        conn.close()
+
+        # 검색 필터
+        col_s1, col_s2 = st.columns([2, 1])
+        with col_s1:
+            keyword = st.text_input("🔍 이름 / 이메일 / 회사 검색", placeholder="검색어를 입력하세요...")
+        with col_s2:
+            countries_list = ["전체"] + sorted(df_customers["국가"].dropna().unique().tolist())
+            selected_country = st.selectbox("국가 필터", countries_list)
+
+        filtered = df_customers.copy()
+        if keyword:
+            mask = (
+                filtered["이름"].str.contains(keyword, case=False, na=False)
+                | filtered["성"].str.contains(keyword, case=False, na=False)
+                | filtered["이메일"].str.contains(keyword, case=False, na=False)
+                | filtered["회사"].str.contains(keyword, case=False, na=False)
+            )
+            filtered = filtered[mask]
+        if selected_country != "전체":
+            filtered = filtered[filtered["국가"] == selected_country]
+
+        st.dataframe(filtered, use_container_width=True, height=500, hide_index=True)
+        st.caption(f"총 {len(filtered)}명 / 전체 {len(df_customers)}명")
+
+    # ----------------------------------------------------------
+    # 탭 2: 고객 정보 수정
+    # ----------------------------------------------------------
+    with tab2:
+        st.subheader("✏️ 고객 정보 수정")
+
+        conn = sqlite3.connect(DB_PATH)
+        df_list = pd.read_sql(
+            "SELECT CustomerId, FirstName || ' ' || LastName AS FullName FROM customers ORDER BY CustomerId",
+            conn
+        )
+        conn.close()
+
+        # 고객 선택
+        customer_options = {f"[{row.CustomerId}] {row.FullName}": row.CustomerId
+                            for row in df_list.itertuples()}
+        selected_label = st.selectbox("수정할 고객 선택", list(customer_options.keys()))
+        selected_id = customer_options[selected_label]
+
+        # 선택된 고객 현재 정보 로드
+        conn = sqlite3.connect(DB_PATH)
+        row = pd.read_sql(
+            "SELECT * FROM customers WHERE CustomerId = ?", conn, params=(selected_id,)
+        ).iloc[0]
+        conn.close()
+
+        st.markdown("**현재 정보를 수정하세요:**")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            new_first = st.text_input("이름 (FirstName)", value=row["FirstName"] or "")
+            new_company = st.text_input("회사 (Company)", value=row["Company"] or "")
+            new_city = st.text_input("도시 (City)", value=row["City"] or "")
+            new_country = st.text_input("국가 (Country)", value=row["Country"] or "")
+            new_phone = st.text_input("전화번호 (Phone)", value=row["Phone"] or "")
+        with col2:
+            new_last = st.text_input("성 (LastName)", value=row["LastName"] or "")
+            new_address = st.text_input("주소 (Address)", value=row["Address"] or "")
+            new_state = st.text_input("주/도 (State)", value=row["State"] or "")
+            new_postal = st.text_input("우편번호 (PostalCode)", value=row["PostalCode"] or "")
+            new_email = st.text_input("이메일 (Email)", value=row["Email"] or "")
+
+        if st.button("💾 수정 저장", type="primary", key="update_btn"):
+            # 필수 입력값 검증
+            if not new_first.strip() or not new_last.strip() or not new_email.strip():
+                st.error("⚠️ 이름, 성, 이메일은 필수 입력값입니다.")
+            else:
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    conn.execute("""
+                        UPDATE customers
+                        SET FirstName=?, LastName=?, Company=?, Address=?,
+                            City=?, State=?, Country=?, PostalCode=?,
+                            Phone=?, Email=?
+                        WHERE CustomerId=?
+                    """, (
+                        new_first, new_last, new_company or None, new_address or None,
+                        new_city or None, new_state or None, new_country or None,
+                        new_postal or None, new_phone or None, new_email,
+                        selected_id
+                    ))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ [{selected_id}] {new_first} {new_last} 고객 정보가 수정되었습니다!")
+                    st.cache_data.clear()
+                except Exception as e:
+                    st.error(f"❌ 수정 실패: {e}")
+
+    # ----------------------------------------------------------
+    # 탭 3: 신규 고객 추가
+    # ----------------------------------------------------------
+    with tab3:
+        st.subheader("➕ 신규 고객 추가")
+        st.info("📌 이름, 성, 이메일은 필수 입력 항목입니다.")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            add_first = st.text_input("이름 (FirstName) *", placeholder="예: 민준")
+            add_company = st.text_input("회사 (Company)", placeholder="예: (주)클로드")
+            add_city = st.text_input("도시 (City)", placeholder="예: Seoul")
+            add_country = st.text_input("국가 (Country)", placeholder="예: South Korea")
+            add_phone = st.text_input("전화번호 (Phone)", placeholder="예: +82-10-0000-0000")
+        with col2:
+            add_last = st.text_input("성 (LastName) *", placeholder="예: 김")
+            add_address = st.text_input("주소 (Address)", placeholder="예: 강남구 테헤란로 123")
+            add_state = st.text_input("주/도 (State)", placeholder="예: Seoul")
+            add_postal = st.text_input("우편번호 (PostalCode)", placeholder="예: 06234")
+            add_email = st.text_input("이메일 (Email) *", placeholder="예: minjun@example.com")
+
+        # 담당 직원 선택
+        conn = sqlite3.connect(DB_PATH)
+        df_emp = pd.read_sql(
+            "SELECT EmployeeId, FirstName || ' ' || LastName AS Name FROM employees ORDER BY EmployeeId",
+            conn
+        )
+        conn.close()
+
+        emp_options = {"없음": None}
+        emp_options.update({f"[{r.EmployeeId}] {r.Name}": r.EmployeeId for r in df_emp.itertuples()})
+        selected_emp_label = st.selectbox("담당 직원 (선택)", list(emp_options.keys()))
+        selected_emp_id = emp_options[selected_emp_label]
+
+        st.markdown("---")
+
+        # 미리보기
+        with st.expander("👀 입력 내용 미리보기"):
+            preview = {
+                "이름": f"{add_first} {add_last}",
+                "이메일": add_email,
+                "회사": add_company or "-",
+                "주소": f"{add_address}, {add_city}, {add_country}",
+                "전화번호": add_phone or "-",
+            }
+            for k, v in preview.items():
+                st.write(f"**{k}:** {v}")
+
+        if st.button("➕ 고객 추가", type="primary", key="add_btn"):
+            if not add_first.strip() or not add_last.strip() or not add_email.strip():
+                st.error("⚠️ 이름, 성, 이메일은 필수 입력값입니다.")
+            else:
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    conn.execute("""
+                        INSERT INTO customers
+                            (FirstName, LastName, Company, Address, City, State,
+                             Country, PostalCode, Phone, Fax, Email, SupportRepId)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                    """, (
+                        add_first, add_last,
+                        add_company or None, add_address or None,
+                        add_city or None, add_state or None,
+                        add_country or None, add_postal or None,
+                        add_phone or None, add_email,
+                        selected_emp_id
+                    ))
+                    conn.commit()
+
+                    # 새로 생성된 ID 확인
+                    new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    conn.close()
+
+                    st.success(f"✅ 신규 고객이 추가되었습니다! (고객 ID: {new_id})")
+                    st.balloons()
+                    st.cache_data.clear()
+                except Exception as e:
+                    st.error(f"❌ 추가 실패: {e}")
 
 
 # ============================================================
 # 메인
 # ============================================================
 def main():
-    # 데이터 로딩
     with st.spinner("데이터를 불러오는 중..."):
         data = load_data()
 
@@ -575,49 +675,39 @@ def main():
     st.sidebar.caption("음악 스토어 경영분석 대시보드")
     st.sidebar.markdown("---")
 
-    # 페이지 선택
     page = st.sidebar.radio(
         "📑 페이지 선택",
-        ["📊 매출 Overview", "🌍 고객 & 지역", "🎵 장르 & 상품", "👤 영업사원 성과"],
+        ["📊 매출 Overview", "🌍 고객 & 지역", "🎵 장르 & 상품", "👤 영업사원 성과", "👥 고객 관리"],
     )
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔍 공통 필터")
+    # 고객 관리 페이지는 공통 필터 불필요
+    if page != "👥 고객 관리":
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🔍 공통 필터")
 
-    # 연도 범위 슬라이더
-    min_year = int(df_inv_full["Year"].min())
-    max_year = int(df_inv_full["Year"].max())
-    year_range = st.sidebar.slider(
-        "연도 범위",
-        min_value=min_year,
-        max_value=max_year,
-        value=(min_year, max_year),
-        step=1,
-    )
+        min_year = int(df_inv_full["Year"].min())
+        max_year = int(df_inv_full["Year"].max())
+        year_range = st.sidebar.slider("연도 범위", min_value=min_year, max_value=max_year,
+                                       value=(min_year, max_year), step=1)
 
-    # 국가 멀티선택
-    all_countries = sorted(df_inv_full["Country"].dropna().unique().tolist())
-    countries = st.sidebar.multiselect(
-        "국가 선택 (전체 = 비워두기)",
-        options=all_countries,
-        default=[],
-        placeholder="국가를 선택하세요",
-    )
+        all_countries = sorted(df_inv_full["Country"].dropna().unique().tolist())
+        countries = st.sidebar.multiselect("국가 선택 (전체 = 비워두기)", options=all_countries,
+                                           default=[], placeholder="국가를 선택하세요")
 
-    # 필터 적용
-    df_inv_filtered = apply_filters(df_inv_full, year_range, countries)
-    df_items_filtered = apply_filters(df_items_full, year_range, countries)
+        df_inv_filtered = apply_filters(df_inv_full, year_range, countries)
+        df_items_filtered = apply_filters(df_items_full, year_range, countries)
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(
-        f"""
+        st.sidebar.markdown("---")
+        st.sidebar.markdown(f"""
         **현재 선택**
         - 기간: {year_range[0]}~{year_range[1]}
         - 국가: {len(countries) if countries else '전체'}
         - 주문: {len(df_inv_filtered):,}건
         - 매출: {format_currency(df_inv_filtered['Total'].sum())}
-        """
-    )
+        """)
+    else:
+        df_inv_filtered = df_inv_full
+        df_items_filtered = df_items_full
 
     # ============================================================
     # 페이지 라우팅
@@ -630,8 +720,9 @@ def main():
         page_genres(df_items_filtered)
     elif page == "👤 영업사원 성과":
         page_sales_rep(df_inv_filtered)
+    elif page == "👥 고객 관리":
+        page_customer_management()
 
-    # 푸터
     st.markdown("---")
     st.caption("📚 Chinook Sample Database | Built with Streamlit + Plotly")
 
