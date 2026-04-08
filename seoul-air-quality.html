@@ -120,6 +120,26 @@
     .refresh-btn:hover { background: #2563b0; transform: scale(1.05); }
     .refresh-btn:active { transform: scale(.96); }
 
+    .weather-btn {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      background: linear-gradient(135deg, #74b9ff, #0984e3);
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      padding: 10px;
+      font-size: .9rem;
+      font-family: 'Nanum Gothic', sans-serif;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      transition: transform .15s, opacity .15s;
+    }
+    .weather-btn:hover { opacity: .88; transform: scale(1.02); }
+    .weather-btn:active { transform: scale(.97); }
+
     /* main status */
     .status-emoji { font-size: 4rem; text-align: center; margin-bottom: 6px; }
     .status-label {
@@ -277,6 +297,7 @@
       </select>
       <button class="refresh-btn" onclick="fetchData()">🔄 새로고침</button>
     </div>
+    <a class="weather-btn" href="https://weather.naver.com" target="_blank">🌤️ 네이버 날씨 보러가기</a>
   </div>
 
   <div id="main-content">
@@ -322,12 +343,22 @@
     return tips[worst];
   }
 
+  // 구별 샘플 데이터 (API 연동 전 UI 확인용)
+  const sampleData = {
+    '강남구':   { pm10: 38, pm25: 18 },
+    '종로구':   { pm10: 45, pm25: 22 },
+    '마포구':   { pm10: 52, pm25: 28 },
+    '송파구':   { pm10: 33, pm25: 15 },
+    '영등포구': { pm10: 61, pm25: 34 },
+  };
+
   async function fetchData() {
     const station = document.getElementById('stationSelect').value;
     document.getElementById('main-content').innerHTML = `<div class="loading"><span>🌀</span><span>데이터</span><span>로딩중...</span></div>`;
 
     try {
-      const url = `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?stationName=${encodeURIComponent(station)}&dataTerm=DAILY&pageNo=1&numOfRows=1&returnType=json&serviceKey=${API_KEY}&ver=1.0`;
+      const apiUrl = `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?stationName=${encodeURIComponent(station)}&dataTerm=DAILY&pageNo=1&numOfRows=1&returnType=json&serviceKey=${API_KEY}&ver=1.0`;
+      const url = `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`;
 
       const res  = await fetch(url);
       const json = await res.json();
@@ -337,19 +368,26 @@
 
       const pm10  = parseFloat(item.pm10Value);
       const pm25  = parseFloat(item.pm25Value);
-      const pm10g = getGrade(pm10,  'pm10');
-      const pm25g = getGrade(pm25,  'pm25');
+      renderUI(pm10, pm25, station, false);
+
+    } catch(e) {
+      // API 실패 시 샘플 데이터로 대체
+      const sample = sampleData[station] || { pm10: 42, pm25: 20 };
+      renderUI(sample.pm10, sample.pm25, station, true);
+    }
+  }
+
+  function renderUI(pm10, pm25, station, isSample = false) {
+      const pm10g = getGrade(pm10, 'pm10');
+      const pm25g = getGrade(pm25, 'pm25');
       const overall = ['매우나쁨','나쁨','보통','좋음'].find(g => [pm10g, pm25g].includes(g)) || '-';
       const gi    = gradeInfo[overall];
       const outfit = outfitTips(pm10g, pm25g);
-
       const now = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      const sampleBadge = isSample ? `<span style="background:#ffe082;color:#7c5c00;padding:2px 10px;border-radius:99px;font-size:.72rem;font-weight:700;margin-left:6px;">샘플 데이터</span>` : '';
 
       document.getElementById('main-content').innerHTML = `
-
-        <p class="updated">⏰ ${now} 기준 · ${station} 측정소</p>
-
-        <!-- overall status -->
+        <p class="updated">⏰ ${now} 기준 · ${station} 측정소 ${sampleBadge}</p>
         <div class="card">
           <div class="status-emoji">${gi.emoji}</div>
           <div class="status-label" style="color:${gi.color}">${gi.label}</div>
@@ -361,54 +399,37 @@
             </div>
           </div>
         </div>
-
-        <!-- pm values -->
         <div class="card">
           <div class="pm-grid">
             <div class="pm-box">
               <div class="pm-name">미세먼지 PM10</div>
-              <div class="pm-val" style="color:${gradeInfo[pm10g].color}">${isNaN(pm10) ? '-' : pm10}</div>
+              <div class="pm-val" style="color:${gradeInfo[pm10g].color}">${pm10}</div>
               <div class="pm-unit">㎍/㎥</div>
               <span class="pm-grade" style="background:${gradeInfo[pm10g].color}">${pm10g}</span>
             </div>
             <div class="pm-box">
               <div class="pm-name">초미세먼지 PM2.5</div>
-              <div class="pm-val" style="color:${gradeInfo[pm25g].color}">${isNaN(pm25) ? '-' : pm25}</div>
+              <div class="pm-val" style="color:${gradeInfo[pm25g].color}">${pm25}</div>
               <div class="pm-unit">㎍/㎥</div>
               <span class="pm-grade" style="background:${gradeInfo[pm25g].color}">${pm25g}</span>
             </div>
           </div>
         </div>
-
-        <!-- outfit -->
         <div class="card">
           <div class="outfit-title">👗 오늘의 옷차림 추천</div>
           <div class="outfit-items">
             ${outfit.tags.map((t,i) => `<span class="outfit-tag" style="animation-delay:${i*0.07}s">${t}</span>`).join('')}
           </div>
         </div>
-
-        <!-- tip -->
         <div class="card tip-card">
           <div class="tip-title">💌 오늘의 한마디</div>
           <div class="tip-text">${outfit.tip}</div>
         </div>
       `;
-
-      // animate gauge
       setTimeout(() => {
         const gf = document.getElementById('gf');
         if (gf) gf.style.width = gi.pct + '%';
       }, 100);
-
-    } catch(e) {
-      document.getElementById('main-content').innerHTML = `
-        <div class="error-msg">
-          😢 데이터를 불러오지 못했어요.<br>
-          잠시 후 다시 시도해주세요!<br><br>
-          <small style="color:#aaa">${e.message}</small>
-        </div>`;
-    }
   }
 
   document.getElementById('stationSelect').addEventListener('change', fetchData);
