@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🌬️ 서울 공기 어때?</title>
+  <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --good:    #6bcb77;
+      --normal:  #ffd166;
+      --bad:     #ff9a3c;
+      --vbad:    #ef476f;
+      --sky:     #a8d8ea;
+      --cream:   #fff8f0;
+      --brown:   #5c4033;
+      --card-bg: #ffffffcc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Nanum Gothic', sans-serif;
+      background: linear-gradient(160deg, #c9e8f5 0%, #fce4ec 60%, #fff8e1 100%);
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+      color: var(--brown);
+    }
+
+    /* floating clouds */
+    .cloud {
+      position: fixed;
+      opacity: 0.5;
+      pointer-events: none;
+      animation: drift linear infinite;
+      font-size: 3rem;
+      z-index: 0;
+    }
+    .cloud:nth-child(1) { top: 5%;  left: -60px; animation-duration: 22s; }
+    .cloud:nth-child(2) { top: 18%; left: -80px; animation-duration: 30s; animation-delay: -10s; font-size: 2rem; }
+    .cloud:nth-child(3) { top: 40%; left: -60px; animation-duration: 26s; animation-delay: -6s;  }
+
+    @keyframes drift { from { transform: translateX(-120px); } to { transform: translateX(110vw); } }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* header */
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+      animation: popIn .6s cubic-bezier(.34,1.56,.64,1) both;
+    }
+    .header h1 {
+      font-family: 'Gaegu', cursive;
+      font-size: 2.4rem;
+      color: #3a7bd5;
+      text-shadow: 2px 3px 0 #fff, 3px 5px 0 #b3d4f5;
+      line-height: 1.2;
+    }
+    .header p { font-size: .85rem; color: #888; margin-top: 4px; }
+
+    /* card base */
+    .card {
+      background: var(--card-bg);
+      border-radius: 24px;
+      padding: 20px 22px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 20px #0001, 0 1px 0 #fff inset;
+      backdrop-filter: blur(6px);
+      animation: popIn .5s cubic-bezier(.34,1.56,.64,1) both;
+    }
+    .card:nth-child(2) { animation-delay: .08s; }
+    .card:nth-child(3) { animation-delay: .16s; }
+    .card:nth-child(4) { animation-delay: .24s; }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(.85) translateY(16px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* station selector */
+    .station-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .station-row label { font-weight: 800; font-size: .9rem; }
+    select {
+      flex: 1;
+      border: 2px solid #b3d4f5;
+      border-radius: 12px;
+      padding: 6px 10px;
+      font-family: 'Nanum Gothic', sans-serif;
+      font-size: .9rem;
+      background: #f0f8ff;
+      color: var(--brown);
+      outline: none;
+      cursor: pointer;
+    }
+    select:focus { border-color: #3a7bd5; }
+
+    .refresh-btn {
+      background: #3a7bd5;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 7px 14px;
+      font-size: .85rem;
+      font-family: 'Nanum Gothic', sans-serif;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .15s, background .15s;
+    }
+    .refresh-btn:hover { background: #2563b0; transform: scale(1.05); }
+    .refresh-btn:active { transform: scale(.96); }
+
+    /* main status */
+    .status-emoji { font-size: 4rem; text-align: center; margin-bottom: 6px; }
+    .status-label {
+      text-align: center;
+      font-family: 'Gaegu', cursive;
+      font-size: 1.9rem;
+      font-weight: 700;
+    }
+    .status-sub { text-align: center; font-size: .82rem; color: #999; margin-top: 2px; }
+
+    /* gauge */
+    .gauge-wrap { margin: 14px 0 8px; }
+    .gauge-label { display: flex; justify-content: space-between; font-size: .78rem; color: #aaa; margin-bottom: 4px; }
+    .gauge-bar {
+      height: 14px;
+      background: #e8edf0;
+      border-radius: 99px;
+      overflow: hidden;
+      position: relative;
+    }
+    .gauge-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 1.2s cubic-bezier(.4,0,.2,1);
+      position: relative;
+    }
+    .gauge-fill::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 4px; right: 4px; height: 4px;
+      background: #fff4;
+      border-radius: 99px;
+    }
+
+    /* pm grid */
+    .pm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+    .pm-box {
+      background: #f5faff;
+      border-radius: 16px;
+      padding: 14px;
+      text-align: center;
+      border: 2px solid #e0eefc;
+    }
+    .pm-box .pm-name { font-size: .72rem; color: #888; margin-bottom: 4px; }
+    .pm-box .pm-val { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .pm-box .pm-unit { font-size: .7rem; color: #aaa; }
+    .pm-box .pm-grade {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 2px 10px;
+      border-radius: 99px;
+      font-size: .75rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* outfit card */
+    .outfit-title {
+      font-family: 'Gaegu', cursive;
+      font-size: 1.3rem;
+      margin-bottom: 10px;
+    }
+    .outfit-items { display: flex; flex-wrap: wrap; gap: 8px; }
+    .outfit-tag {
+      background: #fff0f5;
+      border: 2px solid #ffc8d8;
+      border-radius: 99px;
+      padding: 5px 14px;
+      font-size: .82rem;
+      font-weight: 700;
+      color: #c2486a;
+      animation: wiggle .4s ease both;
+    }
+    @keyframes wiggle {
+      0%   { transform: rotate(-4deg) scale(.9); }
+      50%  { transform: rotate(3deg) scale(1.05); }
+      100% { transform: rotate(0deg) scale(1); }
+    }
+
+    /* tip card */
+    .tip-card { background: #fffde7cc; border: 2px dashed #ffe082; }
+    .tip-title { font-family: 'Gaegu', cursive; font-size: 1.2rem; margin-bottom: 8px; }
+    .tip-text { font-size: .85rem; line-height: 1.7; color: #6d5c00; }
+
+    /* loading / error */
+    .loading {
+      text-align: center;
+      padding: 32px;
+      font-family: 'Gaegu', cursive;
+      font-size: 1.4rem;
+      color: #3a7bd5;
+    }
+    .loading span { display: inline-block; animation: bounce .6s infinite alternate; }
+    .loading span:nth-child(2) { animation-delay: .1s; }
+    .loading span:nth-child(3) { animation-delay: .2s; }
+    @keyframes bounce { to { transform: translateY(-8px); } }
+
+    .error-msg {
+      text-align: center;
+      padding: 20px;
+      color: #e55;
+      font-size: .9rem;
+      background: #fff5f5;
+      border-radius: 16px;
+      border: 2px dashed #ffaaaa;
+    }
+
+    .updated { text-align: center; font-size: .75rem; color: #bbb; margin-top: -8px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+<!-- floating clouds -->
+<div class="cloud">☁️</div>
+<div class="cloud">⛅</div>
+<div class="cloud">☁️</div>
+
+<div class="container">
+
+  <div class="header">
+    <h1>🌬️ 서울 공기 어때?</h1>
+    <p>실시간 미세먼지 & 옷차림 추천</p>
+  </div>
+
+  <!-- station picker -->
+  <div class="card" style="animation-delay:0s">
+    <div class="station-row">
+      <label>📍 측정소</label>
+      <select id="stationSelect">
+        <option value="종로구">종로구</option>
+        <option value="중구">중구</option>
+        <option value="용산구">용산구</option>
+        <option value="성동구">성동구</option>
+        <option value="광진구">광진구</option>
+        <option value="동대문구">동대문구</option>
+        <option value="중랑구">중랑구</option>
+        <option value="성북구">성북구</option>
+        <option value="강북구">강북구</option>
+        <option value="도봉구">도봉구</option>
+        <option value="노원구">노원구</option>
+        <option value="은평구">은평구</option>
+        <option value="서대문구">서대문구</option>
+        <option value="마포구">마포구</option>
+        <option value="양천구">양천구</option>
+        <option value="강서구">강서구</option>
+        <option value="구로구">구로구</option>
+        <option value="금천구">금천구</option>
+        <option value="영등포구">영등포구</option>
+        <option value="동작구">동작구</option>
+        <option value="관악구">관악구</option>
+        <option value="서초구">서초구</option>
+        <option value="강남구" selected>강남구</option>
+        <option value="송파구">송파구</option>
+        <option value="강동구">강동구</option>
+      </select>
+      <button class="refresh-btn" onclick="fetchData()">🔄 새로고침</button>
+    </div>
+  </div>
+
+  <div id="main-content">
+    <div class="loading"><span>⌛</span><span>불러오는</span><span>중...</span></div>
+  </div>
+
+</div>
+
+<script>
+  const API_KEY = 'f5528a9299cabe613190901e5e314e2493820c9d2966f3f6f90882b5e7f4424b';
+
+  const gradeInfo = {
+    '좋음':     { emoji: '😊', color: '#6bcb77', pct: 20,  label: '좋음' },
+    '보통':     { emoji: '🙂', color: '#ffd166', pct: 45,  label: '보통' },
+    '나쁨':     { emoji: '😷', color: '#ff9a3c', pct: 70,  label: '나쁨' },
+    '매우나쁨': { emoji: '🤢', color: '#ef476f', pct: 95,  label: '매우나쁨' },
+    '-':        { emoji: '❓', color: '#ccc',    pct: 0,   label: '정보없음' },
+  };
+
+  function getGrade(val, type) {
+    if (val == null || val < 0) return '-';
+    if (type === 'pm10') {
+      if (val <= 30)  return '좋음';
+      if (val <= 80)  return '보통';
+      if (val <= 150) return '나쁨';
+      return '매우나쁨';
+    } else {
+      if (val <= 15)  return '좋음';
+      if (val <= 35)  return '보통';
+      if (val <= 75)  return '나쁨';
+      return '매우나쁨';
+    }
+  }
+
+  function outfitTips(pm10Grade, pm25Grade) {
+    const worst = ['매우나쁨','나쁨','보통','좋음'].find(g => [pm10Grade, pm25Grade].includes(g)) || '좋음';
+    const tips = {
+      '좋음':     { tags: ['👕 가볍게 입기 OK', '🚶 외출 쾌적', '🪟 환기 추천'], tip: '오늘은 공기가 정말 맑아요! 산책하기 딱 좋은 날이에요 🌿' },
+      '보통':     { tags: ['😷 마스크 선택', '🧥 얇은 겉옷 추천', '🚪 환기 가능'], tip: '공기가 나쁘진 않지만 민감하신 분은 마스크를 챙겨보세요.' },
+      '나쁨':     { tags: ['😷 마스크 필수', '🏠 실내 활동 권장', '🪟 환기 자제', '👶 어린이 주의'], tip: '오늘은 외출을 줄이고 마스크를 꼭 착용하세요! 특히 어린이나 어르신은 더 주의가 필요해요.' },
+      '매우나쁨': { tags: ['🚫 외출 자제 권고', '😷 KF94 마스크 필수', '🏠 창문 닫기', '🧹 공기청정기 가동', '👶 어린이·노약자 외출 금지'], tip: '공기 상태가 매우 심각해요! 꼭 필요한 외출이 아니면 집에 계세요. 공기청정기를 틀어두세요 🙏' },
+    };
+    return tips[worst];
+  }
+
+  async function fetchData() {
+    const station = document.getElementById('stationSelect').value;
+    document.getElementById('main-content').innerHTML = `<div class="loading"><span>🌀</span><span>데이터</span><span>로딩중...</span></div>`;
+
+    try {
+      const url = `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?stationName=${encodeURIComponent(station)}&dataTerm=DAILY&pageNo=1&numOfRows=1&returnType=json&serviceKey=${API_KEY}&ver=1.0`;
+
+      const res  = await fetch(url);
+      const json = await res.json();
+      const item = json?.response?.body?.items?.[0];
+
+      if (!item) throw new Error('데이터 없음');
+
+      const pm10  = parseFloat(item.pm10Value);
+      const pm25  = parseFloat(item.pm25Value);
+      const pm10g = getGrade(pm10,  'pm10');
+      const pm25g = getGrade(pm25,  'pm25');
+      const overall = ['매우나쁨','나쁨','보통','좋음'].find(g => [pm10g, pm25g].includes(g)) || '-';
+      const gi    = gradeInfo[overall];
+      const outfit = outfitTips(pm10g, pm25g);
+
+      const now = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+      document.getElementById('main-content').innerHTML = `
+
+        <p class="updated">⏰ ${now} 기준 · ${station} 측정소</p>
+
+        <!-- overall status -->
+        <div class="card">
+          <div class="status-emoji">${gi.emoji}</div>
+          <div class="status-label" style="color:${gi.color}">${gi.label}</div>
+          <div class="status-sub">통합 대기질 상태</div>
+          <div class="gauge-wrap">
+            <div class="gauge-label"><span>좋음</span><span>매우나쁨</span></div>
+            <div class="gauge-bar">
+              <div class="gauge-fill" id="gf" style="width:0%;background:${gi.color}"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- pm values -->
+        <div class="card">
+          <div class="pm-grid">
+            <div class="pm-box">
+              <div class="pm-name">미세먼지 PM10</div>
+              <div class="pm-val" style="color:${gradeInfo[pm10g].color}">${isNaN(pm10) ? '-' : pm10}</div>
+              <div class="pm-unit">㎍/㎥</div>
+              <span class="pm-grade" style="background:${gradeInfo[pm10g].color}">${pm10g}</span>
+            </div>
+            <div class="pm-box">
+              <div class="pm-name">초미세먼지 PM2.5</div>
+              <div class="pm-val" style="color:${gradeInfo[pm25g].color}">${isNaN(pm25) ? '-' : pm25}</div>
+              <div class="pm-unit">㎍/㎥</div>
+              <span class="pm-grade" style="background:${gradeInfo[pm25g].color}">${pm25g}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- outfit -->
+        <div class="card">
+          <div class="outfit-title">👗 오늘의 옷차림 추천</div>
+          <div class="outfit-items">
+            ${outfit.tags.map((t,i) => `<span class="outfit-tag" style="animation-delay:${i*0.07}s">${t}</span>`).join('')}
+          </div>
+        </div>
+
+        <!-- tip -->
+        <div class="card tip-card">
+          <div class="tip-title">💌 오늘의 한마디</div>
+          <div class="tip-text">${outfit.tip}</div>
+        </div>
+      `;
+
+      // animate gauge
+      setTimeout(() => {
+        const gf = document.getElementById('gf');
+        if (gf) gf.style.width = gi.pct + '%';
+      }, 100);
+
+    } catch(e) {
+      document.getElementById('main-content').innerHTML = `
+        <div class="error-msg">
+          😢 데이터를 불러오지 못했어요.<br>
+          잠시 후 다시 시도해주세요!<br><br>
+          <small style="color:#aaa">${e.message}</small>
+        </div>`;
+    }
+  }
+
+  document.getElementById('stationSelect').addEventListener('change', fetchData);
+  fetchData();
+</script>
+</body>
+</html>
