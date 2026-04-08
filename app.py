@@ -447,13 +447,139 @@ def page_sales_rep(df_inv):
     )
     st.plotly_chart(style_plotly(fig_dist, height=500), use_container_width=True)
 
-# ----------------------------------------------------------
+
+# ============================================================
+# 페이지 5: 고객 관리 (신규 추가)
+# ============================================================
+def page_customer_management():
+    st.title("👥 고객 관리")
+    st.caption("고객 정보 조회, 수정, 신규 고객 추가, 삭제를 할 수 있습니다.")
+
+    # 탭 구성
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 고객 목록 조회", "✏️ 고객 정보 수정", "➕ 신규 고객 추가", "🗑️ 고객 삭제"])
+
+    # ----------------------------------------------------------
+    # 탭 1: 고객 목록 조회
+    # ----------------------------------------------------------
+    with tab1:
+        st.subheader("📋 전체 고객 목록")
+
+        conn = sqlite3.connect(DB_PATH)
+        df_customers = pd.read_sql("""
+            SELECT
+                c.CustomerId       AS 고객ID,
+                c.FirstName        AS 이름,
+                c.LastName         AS 성,
+                c.Company          AS 회사,
+                c.Country          AS 국가,
+                c.City             AS 도시,
+                c.Email            AS 이메일,
+                c.Phone            AS 전화번호,
+                e.FirstName || ' ' || e.LastName AS 담당직원
+            FROM customers c
+            LEFT JOIN employees e ON c.SupportRepId = e.EmployeeId
+            ORDER BY c.CustomerId
+        """, conn)
+        conn.close()
+
+        # 검색 필터
+        col_s1, col_s2 = st.columns([2, 1])
+        with col_s1:
+            keyword = st.text_input("🔍 이름 / 이메일 / 회사 검색", placeholder="검색어를 입력하세요...")
+        with col_s2:
+            countries_list = ["전체"] + sorted(df_customers["국가"].dropna().unique().tolist())
+            selected_country = st.selectbox("국가 필터", countries_list)
+
+        filtered = df_customers.copy()
+        if keyword:
+            mask = (
+                filtered["이름"].str.contains(keyword, case=False, na=False)
+                | filtered["성"].str.contains(keyword, case=False, na=False)
+                | filtered["이메일"].str.contains(keyword, case=False, na=False)
+                | filtered["회사"].str.contains(keyword, case=False, na=False)
+            )
+            filtered = filtered[mask]
+        if selected_country != "전체":
+            filtered = filtered[filtered["국가"] == selected_country]
+
+        st.dataframe(filtered, use_container_width=True, height=500, hide_index=True)
+        st.caption(f"총 {len(filtered)}명 / 전체 {len(df_customers)}명")
+
+    # ----------------------------------------------------------
+    # 탭 2: 고객 정보 수정
+    # ----------------------------------------------------------
+    with tab2:
+        st.subheader("✏️ 고객 정보 수정")
+
+        conn = sqlite3.connect(DB_PATH)
+        df_list = pd.read_sql(
+            "SELECT CustomerId, FirstName || ' ' || LastName AS FullName FROM customers ORDER BY CustomerId",
+            conn
+        )
+        conn.close()
+
+        # 고객 선택
+        customer_options = {f"[{row.CustomerId}] {row.FullName}": row.CustomerId
+                            for row in df_list.itertuples()}
+        selected_label = st.selectbox("수정할 고객 선택", list(customer_options.keys()))
+        selected_id = customer_options[selected_label]
+
+        # 선택된 고객 현재 정보 로드
+        conn = sqlite3.connect(DB_PATH)
+        row = pd.read_sql(
+            "SELECT * FROM customers WHERE CustomerId = ?", conn, params=(selected_id,)
+        ).iloc[0]
+        conn.close()
+
+        st.markdown("**현재 정보를 수정하세요:**")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            new_first = st.text_input("이름 (FirstName)", value=row["FirstName"] or "")
+            new_company = st.text_input("회사 (Company)", value=row["Company"] or "")
+            new_city = st.text_input("도시 (City)", value=row["City"] or "")
+            new_country = st.text_input("국가 (Country)", value=row["Country"] or "")
+            new_phone = st.text_input("전화번호 (Phone)", value=row["Phone"] or "")
+        with col2:
+            new_last = st.text_input("성 (LastName)", value=row["LastName"] or "")
+            new_address = st.text_input("주소 (Address)", value=row["Address"] or "")
+            new_state = st.text_input("주/도 (State)", value=row["State"] or "")
+            new_postal = st.text_input("우편번호 (PostalCode)", value=row["PostalCode"] or "")
+            new_email = st.text_input("이메일 (Email)", value=row["Email"] or "")
+
+        if st.button("💾 수정 저장", type="primary", key="update_btn"):
+            # 필수 입력값 검증
+            if not new_first.strip() or not new_last.strip() or not new_email.strip():
+                st.error("⚠️ 이름, 성, 이메일은 필수 입력값입니다.")
+            else:
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    conn.execute("""
+                        UPDATE customers
+                        SET FirstName=?, LastName=?, Company=?, Address=?,
+                            City=?, State=?, Country=?, PostalCode=?,
+                            Phone=?, Email=?
+                        WHERE CustomerId=?
+                    """, (
+                        new_first, new_last, new_company or None, new_address or None,
+                        new_city or None, new_state or None, new_country or None,
+                        new_postal or None, new_phone or None, new_email,
+                        selected_id
+                    ))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ [{selected_id}] {new_first} {new_last} 고객 정보가 수정되었습니다!")
+                    st.cache_data.clear()
+                except Exception as e:
+                    st.error(f"❌ 수정 실패: {e}")
+
+    # ----------------------------------------------------------
     # 탭 3: 신규 고객 추가
     # ----------------------------------------------------------
     with tab3:
         st.subheader("➕ 신규 고객 추가")
         st.info("📌 이름, 성, 이메일은 필수 입력 항목입니다.")
- 
+
         col1, col2 = st.columns(2)
         with col1:
             add_first = st.text_input("이름 (FirstName) *", placeholder="예: 민준")
@@ -467,7 +593,7 @@ def page_sales_rep(df_inv):
             add_state = st.text_input("주/도 (State)", placeholder="예: Seoul")
             add_postal = st.text_input("우편번호 (PostalCode)", placeholder="예: 06234")
             add_email = st.text_input("이메일 (Email) *", placeholder="예: minjun@example.com")
- 
+
         # 담당 직원 선택
         conn = sqlite3.connect(DB_PATH)
         df_emp = pd.read_sql(
@@ -475,14 +601,14 @@ def page_sales_rep(df_inv):
             conn
         )
         conn.close()
- 
+
         emp_options = {"없음": None}
         emp_options.update({f"[{r.EmployeeId}] {r.Name}": r.EmployeeId for r in df_emp.itertuples()})
         selected_emp_label = st.selectbox("담당 직원 (선택)", list(emp_options.keys()))
         selected_emp_id = emp_options[selected_emp_label]
- 
+
         st.markdown("---")
- 
+
         # 미리보기
         with st.expander("👀 입력 내용 미리보기"):
             preview = {
@@ -494,7 +620,7 @@ def page_sales_rep(df_inv):
             }
             for k, v in preview.items():
                 st.write(f"**{k}:** {v}")
- 
+
         if st.button("➕ 고객 추가", type="primary", key="add_btn"):
             if not add_first.strip() or not add_last.strip() or not add_email.strip():
                 st.error("⚠️ 이름, 성, 이메일은 필수 입력값입니다.")
@@ -515,31 +641,31 @@ def page_sales_rep(df_inv):
                         selected_emp_id
                     ))
                     conn.commit()
- 
+
                     # 새로 생성된 ID 확인
                     new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
                     conn.close()
- 
+
                     st.success(f"✅ 신규 고객이 추가되었습니다! (고객 ID: {new_id})")
                     st.balloons()
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 추가 실패: {e}")
- 
+
     # ----------------------------------------------------------
     # 탭 4: 고객 삭제
     # ----------------------------------------------------------
     with tab4:
         st.subheader("🗑️ 고객 삭제")
         st.warning("⚠️ 삭제된 고객 정보는 복구할 수 없습니다. 신중하게 진행해주세요.")
- 
+
         conn = sqlite3.connect(DB_PATH)
         df_del_list = pd.read_sql(
             "SELECT CustomerId, FirstName || ' ' || LastName AS FullName, Email, Country FROM customers ORDER BY CustomerId",
             conn
         )
         conn.close()
- 
+
         # 검색으로 좁히기
         del_search = st.text_input("🔍 삭제할 고객 검색 (이름 / 이메일)", placeholder="검색어를 입력하세요...")
         filtered_del = df_del_list.copy()
@@ -548,7 +674,7 @@ def page_sales_rep(df_inv):
                 filtered_del["FullName"].str.contains(del_search, case=False, na=False)
                 | filtered_del["Email"].str.contains(del_search, case=False, na=False)
             ]
- 
+
         if filtered_del.empty:
             st.info("검색 결과가 없습니다.")
         else:
@@ -556,19 +682,19 @@ def page_sales_rep(df_inv):
                            for r in filtered_del.itertuples()}
             selected_del_label = st.selectbox("삭제할 고객 선택", list(del_options.keys()))
             selected_del_id = del_options[selected_del_label]
- 
+
             # 선택된 고객 정보 미리보기
             conn = sqlite3.connect(DB_PATH)
             del_row = pd.read_sql(
                 "SELECT * FROM customers WHERE CustomerId = ?", conn, params=(selected_del_id,)
             ).iloc[0]
- 
+
             # 구매 이력 확인
             purchase_count = pd.read_sql(
                 "SELECT COUNT(*) AS cnt FROM invoices WHERE CustomerId = ?", conn, params=(selected_del_id,)
             ).iloc[0]["cnt"]
             conn.close()
- 
+
             # 고객 정보 카드
             with st.expander("📄 선택된 고객 정보 확인", expanded=True):
                 c1, c2 = st.columns(2)
@@ -585,10 +711,10 @@ def page_sales_rep(df_inv):
                         st.error(f"🛒 구매 이력 {purchase_count}건 있음 — 삭제 시 관련 데이터도 함께 삭제됩니다!")
                     else:
                         st.success("🛒 구매 이력 없음")
- 
+
             # 확인 체크박스 (실수 방지)
             confirm = st.checkbox(f"**[{selected_del_id}] {del_row['FirstName']} {del_row['LastName']}** 고객을 삭제하겠습니다.")
- 
+
             if st.button("🗑️ 삭제 실행", type="primary", key="delete_btn", disabled=not confirm):
                 try:
                     conn = sqlite3.connect(DB_PATH)
@@ -608,7 +734,6 @@ def page_sales_rep(df_inv):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 삭제 실패: {e}")
- 
 
 
 # ============================================================
