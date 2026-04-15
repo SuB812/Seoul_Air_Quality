@@ -1,7 +1,7 @@
 # MyStore Analytics — Chinook 음반 매출 분석 대시보드
 
-Chinook 음반 스토어 데이터를 기반으로 한 Streamlit 대시보드입니다.  
-매출 분석, 비즈니스 인사이트 도출, 고객 관리 기능을 제공합니다.
+Chinook 음반 스토어 데이터를 기반으로 한 Streamlit 대시보드.  
+매출 분석, 비즈니스 인사이트 도출, 고객 관리 기능을 제공.
 
 
 
@@ -74,7 +74,7 @@ LEFT JOIN customers c ON i.CustomerId = c.CustomerId
 LEFT JOIN employees e ON c.SupportRepId = e.EmployeeId
 ```
 
-인보이스(invoices), 고객(customers), 직원(employees) 테이블을 LEFT JOIN으로 연결해 매출 분석의 기본 데이터셋을 구성합니다. LEFT JOIN을 사용해 담당 직원이 없는 고객 데이터도 누락 없이 포함합니다.
+인보이스(invoices), 고객(customers), 직원(employees) 테이블을 LEFT JOIN으로 연결해 매출 분석의 기본 데이터셋을 구성. LEFT JOIN을 사용해 담당 직원이 없는 고객 데이터도 누락 없이 포함.
 
 ---
 
@@ -93,7 +93,7 @@ JOIN artists ar ON al.ArtistId = ar.ArtistId
 JOIN invoices i ON ii.InvoiceId = i.InvoiceId
 ```
 
-판매 아이템(invoice_items)을 중심으로 트랙·장르·앨범·아티스트·인보이스 5개 테이블을 JOIN해 장르별·아티스트별 매출 분석에 활용합니다. `UnitPrice * Quantity`로 라인별 매출액(LineTotal)을 계산합니다.
+판매 아이템(invoice_items)을 중심으로 트랙·장르·앨범·아티스트·인보이스 5개 테이블을 JOIN해 장르별·아티스트별 매출 분석에 활용. `UnitPrice * Quantity`로 라인별 매출액(LineTotal)을 계산.
 
 ---
 
@@ -112,7 +112,7 @@ WHERE CAST(strftime('%Y', i.InvoiceDate) AS INTEGER) BETWEEN ? AND ?
 GROUP BY ar.Name, i.BillingCountry, i.CustomerId
 ```
 
-고객별로 동일 아티스트를 몇 번의 서로 다른 Invoice에서 구매했는지 집계합니다. `COUNT(DISTINCT InvoiceId)`로 중복 제거 후 구매 횟수를 측정하며, `strftime`으로 연도 필터링을 적용합니다.
+고객별로 동일 아티스트를 몇 번의 서로 다른 Invoice에서 구매했는지 집계. `COUNT(DISTINCT InvoiceId)`로 중복 제거 후 구매 횟수를 측정하며, `strftime`으로 연도 필터링을 적용.
 
 ---
 
@@ -125,8 +125,8 @@ SET FirstName=?, LastName=?, Company=?, Address=?,
 WHERE CustomerId=?
 ```
 
-특정 고객의 정보를 수정합니다. `?` 파라미터 바인딩 방식을 사용해 SQL 인젝션 공격을 방지합니다. `WHERE CustomerId=?`로 특정 고객만 업데이트되도록 제한합니다.
-
+특정 고객의 정보를 수정. `WHERE CustomerId=?`로 특정 고객만 업데이트되도록 제한.
+(++ ? 바인딩 = 사용자 입력값이 SQL 명령어로 실행되지 않도록 막는 안전장치)
 ---
 
 ### 5. 신규 고객 추가 (INSERT)
@@ -138,14 +138,14 @@ INSERT INTO customers
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
 ```
 
-새 고객 레코드를 customers 테이블에 삽입합니다. Fax는 NULL로 고정하고, 나머지 값은 Python에서 파라미터로 전달합니다.
+새 고객 레코드를 customers 테이블에 삽입. Fax는 NULL로 고정.
 
 ---
 
 ### 6. 고객 삭제 — 연쇄 삭제 (DELETE + 서브쿼리)
 
-```sql
--- 1단계: 관련 구매 아이템 삭제
+```sql 
+-- 1단계: 관련 구매 아이템 삭제 
 DELETE FROM invoice_items
 WHERE InvoiceId IN (
     SELECT InvoiceId FROM invoices WHERE CustomerId = ?
@@ -154,11 +154,11 @@ WHERE InvoiceId IN (
 -- 2단계: 인보이스 삭제
 DELETE FROM invoices WHERE CustomerId = ?
 
--- 3단계: 고객 삭제
+-- 3단계: 고객 삭제 (가장 뿌리가 되는 Entitiy이므로)
 DELETE FROM customers WHERE CustomerId = ?
 ```
 
-외래키 제약으로 인해 고객 삭제 시 연결된 데이터를 먼저 삭제해야 합니다. `invoice_items → invoices → customers` 순서로 삭제해 참조 무결성을 유지합니다. 서브쿼리를 사용해 해당 고객의 모든 인보이스 아이템을 한 번에 삭제합니다.
+외래키 제약으로 인해 고객 삭제 시 연결된 데이터를 먼저 삭제해야 됨. `invoice_items → invoices → customers` 순서로 삭제해 참조 무결성을 유지. 서브쿼리를 사용해 해당 고객의 모든 인보이스 아이템을 한 번에 삭제.
 
 ---
 
