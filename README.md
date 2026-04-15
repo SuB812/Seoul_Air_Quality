@@ -3,16 +3,7 @@
 Chinook 음반 스토어 데이터를 기반으로 한 Streamlit 대시보드입니다.  
 매출 분석, 비즈니스 인사이트 도출, 고객 관리 기능을 제공합니다.
 
----
 
-## 실행 방법
-
-```bash
-pip install streamlit pandas plotly numpy
-streamlit run app.py
-```
-
----
 
 ## 대시보드 구성
 
@@ -171,7 +162,7 @@ DELETE FROM customers WHERE CustomerId = ?
 
 ---
 
-## 기술 스택
+## 라이브러리 요약
 
 - **Python** — 백엔드 로직
 - **Streamlit** — 웹 대시보드 프레임워크
